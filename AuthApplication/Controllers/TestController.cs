@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using AuthApplication.Authorization;
 
 namespace AuthApplication.Controllers
 {
@@ -17,21 +18,21 @@ namespace AuthApplication.Controllers
         }
 
         [HttpGet("auth-user")]
-        [Authorize(Roles = Roles.User)]
+        [Authorize(Roles = AuthRoles.User)]
         public IActionResult TestAuthUser()
         {
             return Ok("You are authorized user with role = user");
         }
 
         [HttpGet("auth-admin")]
-        [Authorize(Roles = Roles.Admin)]
+        [Authorize(Roles = AuthRoles.Admin)]
         public IActionResult TestAuthAdmin()
         {
             return Ok("You are authorized user with role = admin");
         }
 
         [HttpGet("auth-super")]
-        [Authorize(Roles = Roles.SuperAdmin)]
+        [Authorize(Roles = AuthRoles.SuperAdmin)]
         public IActionResult TestAuthSuper()
         {
             return Ok("You are authorized user with role = super admin ");

@@ -35,7 +35,7 @@ namespace AuthApplication.Services
         {
             if (userRole == null)
             {
-                userRole = Roles.User;
+                userRole = AuthRoles.User;
             }
 
             var user = new ApplicationUser()

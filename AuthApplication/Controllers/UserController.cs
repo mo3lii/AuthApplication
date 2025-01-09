@@ -22,7 +22,7 @@ namespace AuthApplication.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(UserRegisterRequest userRegisterDto)
         {
-            var result = await _userService.RegisterUser(userRegisterDto,Roles.User);
+            var result = await _userService.RegisterUser(userRegisterDto,AuthRoles.User);
             if(!result.Success)
             {
                 return BadRequest(result);
@@ -31,10 +31,10 @@ namespace AuthApplication.Controllers
         }
 
         [HttpPost("registerAdmin")]
-        [Authorize(Roles = $"{Roles.SuperAdmin},{Roles.Admin}")]
+        [Authorize(Roles = $"{AuthRoles.SuperAdmin},{AuthRoles.Admin}")]
         public async Task<IActionResult> RegisterAdmin(UserRegisterRequest userRegisterDto)
         {
-            var result = await _userService.RegisterUser(userRegisterDto,Roles.Admin);
+            var result = await _userService.RegisterUser(userRegisterDto, AuthRoles.Admin);
             if (!result.Success)
             {
                 return BadRequest(result);
@@ -43,10 +43,10 @@ namespace AuthApplication.Controllers
         }
 
         [HttpPost("registerSuperAmin")]
-        [Authorize(Roles = Roles.SuperAdmin)]
+        [Authorize(Roles = AuthRoles.SuperAdmin)]
         public async Task<IActionResult> RegisterSuperAdmin(UserRegisterRequest request)
         {
-            var result = await _userService.RegisterUser(request, Roles.SuperAdmin);
+            var result = await _userService.RegisterUser(request, AuthRoles.SuperAdmin);
             if (!result.Success)
             {
                 return BadRequest(result);
@@ -65,7 +65,7 @@ namespace AuthApplication.Controllers
             return Ok(result);
         }
 
-        [HttpPost("logout")]
+        [HttpPut("logout")]
         [Authorize()]
         public async Task<IActionResult> Logout()
         {
