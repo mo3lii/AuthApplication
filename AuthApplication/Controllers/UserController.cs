@@ -1,5 +1,8 @@
-﻿using AuthApplication.DTOs;
+﻿using AuthApplication.Authorization;
+using AuthApplication.DataModels;
+using AuthApplication.DataModels;
 using AuthApplication.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AuthApplication.Controllers
@@ -9,13 +12,15 @@ namespace AuthApplication.Controllers
     public class UserController : ControllerBase
     {
         private readonly UserService _userService;
-        public UserController(UserService userService)
+        private readonly AuthTokenService _authTokenService;
+        public UserController(UserService userService,AuthTokenService authTokenService)
         {
             _userService = userService;
+            _authTokenService = authTokenService;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register(UserRegisterDto userRegisterDto)
+        public async Task<IActionResult> Register(UserRegisterRequest userRegisterDto)
         {
             var result = await _userService.RegisterUser(userRegisterDto,Roles.User);
             if(!result.Success)
@@ -26,7 +31,8 @@ namespace AuthApplication.Controllers
         }
 
         [HttpPost("registerAdmin")]
-        public async Task<IActionResult> RegisterAdmin(UserRegisterDto userRegisterDto)
+        [Authorize(Roles = $"{Roles.SuperAdmin},{Roles.Admin}")]
+        public async Task<IActionResult> RegisterAdmin(UserRegisterRequest userRegisterDto)
         {
             var result = await _userService.RegisterUser(userRegisterDto,Roles.Admin);
             if (!result.Success)
@@ -37,9 +43,10 @@ namespace AuthApplication.Controllers
         }
 
         [HttpPost("registerSuperAmin")]
-        public async Task<IActionResult> RegisterSuperAdmin(UserRegisterDto userRegisterDto)
+        [Authorize(Roles = Roles.SuperAdmin)]
+        public async Task<IActionResult> RegisterSuperAdmin(UserRegisterRequest request)
         {
-            var result = await _userService.RegisterUser(userRegisterDto, Roles.SuperAdmin);
+            var result = await _userService.RegisterUser(request, Roles.SuperAdmin);
             if (!result.Success)
             {
                 return BadRequest(result);
@@ -48,9 +55,9 @@ namespace AuthApplication.Controllers
         }
 
         [HttpPost("login")]
-        public async Task<IActionResult> Login(UserLoginDto userLoginDto)
+        public async Task<IActionResult> Login(UserLoginRequest request)
         {
-            var result = await _userService.UserLogin(userLoginDto);
+            var result = await _userService.UserLogin(request);
             if (!result.Success)
             {
                 return Unauthorized(result);
@@ -58,6 +65,28 @@ namespace AuthApplication.Controllers
             return Ok(result);
         }
 
+        [HttpPost("logout")]
+        [Authorize()]
+        public async Task<IActionResult> Logout()
+        {
+            var result = await _userService.UserLogout();
+            if (!result.Success)
+            {
+                return Unauthorized(result);
+            }
+            return Ok(result);
+        }
+
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken(RefreshTokenRequest request)
+        {
+            var result = await _authTokenService.RefreshToken(request.RefreshToken);
+            if (!result.Success)
+            {
+                return Unauthorized(result);
+            }
+            return Ok(result);
+        }
         
     }
 }

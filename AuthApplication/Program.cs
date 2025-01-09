@@ -1,4 +1,5 @@
 
+using AuthApplication.Authorization;
 using AuthApplication.Database;
 using AuthApplication.Middlewares;
 using AuthApplication.Services;
@@ -20,6 +21,8 @@ namespace AuthApplication
 
             //register Classes 
             builder.Services.AddScoped<UserService>();
+            builder.Services.AddScoped<AuthTokenService>();
+            builder.Services.AddScoped<HttpContextAccessor>();
             // Add services to the container.
 
             builder.Services.AddControllers();

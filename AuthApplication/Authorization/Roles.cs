@@ -1,6 +1,6 @@
-﻿namespace AuthApplication.DTOs
+﻿namespace AuthApplication.Authorization
 {
-    public static class Roles
+    public static class AuthRoles
     {
         public const string SuperAdmin = "SuperAdmin";
         public const string Admin = "Admin";

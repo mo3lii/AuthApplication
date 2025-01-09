@@ -1,10 +1,8 @@
-﻿using AuthApplication.Database;
-using AuthApplication.DTOs;
+﻿using AuthApplication.Authorization;
+using AuthApplication.Database;
+using AuthApplication.DataModels;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
+
 
 namespace AuthApplication.Services
 {
@@ -13,25 +11,27 @@ namespace AuthApplication.Services
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SignInManager<ApplicationUser> _signInManager;
         private readonly RoleManager<IdentityRole> _roleManager;
-        private readonly IConfiguration _configuration;
         private readonly ILogger<UserService> _logger;
+        private readonly HttpContextAccessor _httpContextAccessor;
+        private readonly AuthTokenService _authTokenService;
 
         public UserService(
             UserManager<ApplicationUser> userManager, 
             SignInManager<ApplicationUser> signInManager,
             RoleManager<IdentityRole> roleManager,
-            IConfiguration configuration,
-            ILogger<UserService> logger)
+            ILogger<UserService> logger,
+            AuthTokenService authTokenService,
+            HttpContextAccessor httpContextAccessor)
         {
             _userManager = userManager;
             _signInManager = signInManager;
-            _configuration = configuration;
             _roleManager = roleManager;
             _logger = logger;
-
+            _httpContextAccessor = httpContextAccessor;
+            _authTokenService = authTokenService;
         }
 
-        public async Task<RegisterationResponse> RegisterUser(UserRegisterDto userRegisterDto, string? userRole)
+        public async Task<RegisterationResponse> RegisterUser(UserRegisterRequest request, string? userRole)
         {
             if (userRole == null)
             {
@@ -40,11 +40,11 @@ namespace AuthApplication.Services
 
             var user = new ApplicationUser()
             {
-                UserName = userRegisterDto.UserName,
-                Email = userRegisterDto.Email,
+                UserName = request.UserName,
+                Email = request.Email,
             };
 
-            var registerationResult = await _userManager.CreateAsync(user,userRegisterDto.Password);
+            var registerationResult = await _userManager.CreateAsync(user,request.Password);
 
             var response = new RegisterationResponse();
             if (registerationResult.Succeeded)
@@ -64,61 +64,73 @@ namespace AuthApplication.Services
             return response;
         }
 
-        public async Task<UserLoginResponse> UserLogin(UserLoginDto userLoginDto)
+        public async Task<UserLoginResponse> UserLogin(UserLoginRequest request)
         {
 
-            var user = await _userManager.FindByNameAsync(userLoginDto.UserName);
+            var user = await _userManager.FindByNameAsync(request.UserName);
 
             var response = new UserLoginResponse();
 
             if (user == null)
             {
                 response.Success = false;
-                response.Message = "Invalid email or password.";
-                _logger.LogWarning($"Failed login attempt for user: {userLoginDto.UserName} at {DateTime.UtcNow}.");
+                response.Message = "Invalid username or password.";
+                _logger.LogWarning($"Failed login attempt for user: {request.UserName} at {DateTime.UtcNow}.");
                 return response;
             }
 
-            var signInResult = await _signInManager.PasswordSignInAsync(user.UserName, userLoginDto.Password, false, false);
+            var signInResult = await _signInManager.PasswordSignInAsync(user.UserName, request.Password, false, false);
             if (!signInResult.Succeeded)
             {
                 response.Success = false;
                 response.Message = "Invalid username or password."; 
-                _logger.LogWarning($"Failed login attempt for user: {userLoginDto.UserName} at {DateTime.UtcNow}.");
+                _logger.LogWarning($"Failed login attempt for user: {request.UserName} at {DateTime.UtcNow}.");
                 return response;
             }
 
-            response.Success = true;
-            response.Token = await GenerateJwtToken(user);
-            response.Roles = (await _userManager.GetRolesAsync(user)).ToList();
+            var userRefreshToken = await _authTokenService.GetUserActiveRefreshToken(user.Id);
+            if (userRefreshToken != null)
+            {
+                userRefreshToken.Revoke();
+            }
             
+
+            var refreshToken = _authTokenService.GenerateRefreshToken();
+            await _authTokenService.SaveRefreshTokenAsync(user.Id, refreshToken);
+
+            var userRoles = (await _userManager.GetRolesAsync(user)).ToList();
+
+            response.Token = await _authTokenService.GenerateJwtToken(user, userRoles); 
+            response.RefreshToken = refreshToken;
+            response.Success = true;
+            response.Roles = userRoles;
+
             return response;
         }
-        private async Task<string> GenerateJwtToken(ApplicationUser user)
+
+        public async Task<UserLogOutReponse> UserLogout()
         {
-            var claims = new List<Claim>()
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
-                new Claim("id",user.Id.ToString()),
-            };
+            var currentUserId = GetUserIdFromClaims();
+     
+            var user = await _userManager.FindByIdAsync(currentUserId);
 
-            var userRoles = await _userManager.GetRolesAsync(user);
-            foreach(var role in userRoles)
+            var response = new UserLogOutReponse();
+            if (user == null)
             {
-                claims.Add(new Claim(ClaimTypes.Role, role.ToString()));
+                response.Success = false;
+                response.Message = "user not found";
+                return response;
             }
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:SecretKey"]));
-            var creds = new SigningCredentials(key,SecurityAlgorithms.HmacSha256);
 
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: _configuration["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.Now.AddMinutes(20),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token) ;
+            var userRefreshToken = await _authTokenService.GetUserActiveRefreshToken(user.Id);
+            if(userRefreshToken == null)
+            {
+                throw new Exception("No Tokens found for this user");
+            }
+            await _authTokenService.RevokeRefreshToken(userRefreshToken);
+          
+            response.Success = true;
+            return response;
         }
 
         public async Task<IdentityResult> AddUserToRole(ApplicationUser user, string userRole)
@@ -128,15 +140,37 @@ namespace AuthApplication.Services
             if (!roleExist)
             {
                 // Create the role if it does not exist
-                //TODO : seed it to Db
                 var role = new IdentityRole(userRole);
                 var createRoleResult =  await _roleManager.CreateAsync(role);
                 if (!createRoleResult.Succeeded)
-                    throw new Exception("Technichal error occurred");
+                    throw new Exception("Role is not exist");
             }
 
             return await _userManager.AddToRoleAsync(user, userRole);
 
         }
+
+        public string GetUserIdFromClaims()
+        {
+            var userClaims = _httpContextAccessor.HttpContext.User;
+
+            if (userClaims.Identity.IsAuthenticated)
+            {
+                var userId = userClaims.FindFirst("id")?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    throw new Exception("User ID claim not found.");
+                }
+
+                return userId;
+            }
+
+            throw new UnauthorizedAccessException("User is not authenticated.");
+        }
+
+        
     }
+
 }
+

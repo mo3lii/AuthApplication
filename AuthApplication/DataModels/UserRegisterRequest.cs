@@ -1,6 +1,6 @@
-﻿namespace AuthApplication.DTOs
+﻿namespace AuthApplication.DataModels
 {
-    public class UserRegisterDto
+    public class UserRegisterRequest
     {
         public string UserName { get; set; }
 

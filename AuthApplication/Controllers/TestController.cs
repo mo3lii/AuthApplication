@@ -1,4 +1,4 @@
-﻿using AuthApplication.DTOs;
+﻿using AuthApplication.DataModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
